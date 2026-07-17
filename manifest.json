@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Keyboard Pagination",
+  "version": "0.1.0",
+  "description": "Navigate supported pagination with the left and right arrow keys.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
