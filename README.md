@@ -14,6 +14,34 @@ Webサイトのページネーションを左右の矢印キーで操作する�
 </ul>
 ```
 
+Algolia InstantSearchの `.ais-Pagination-item--selected` が現在ページを表すDOMにも対応しています。
+
+```html
+<ul class="ais-Pagination-list">
+  <li class="ais-Pagination-item ais-Pagination-item--page">
+    <a class="ais-Pagination-link" href="?page=7">7</a>
+  </li>
+  <li class="ais-Pagination-item ais-Pagination-item--page ais-Pagination-item--selected">
+    <a class="ais-Pagination-link" href="?page=8">8</a>
+  </li>
+  <li class="ais-Pagination-item ais-Pagination-item--page">
+    <a class="ais-Pagination-link" href="?page=9">9</a>
+  </li>
+</ul>
+```
+
+`.pagelink` 内の `.current` が現在ページを表すDOMにも対応しています。
+
+```html
+<div class="pagelink">
+  <ul>
+    <li><a href="?next_page=1">1</a></li>
+    <li><span class="current">2</span></li>
+    <li><a href="?next_page=3">3</a></li>
+  </ul>
+</div>
+```
+
 - `←`: 現在ページより前にある最初のリンクへ移動
 - `→`: 現在ページより後にある最初のリンクへ移動
 - 空の要素と `.disabled` は読み飛ばす

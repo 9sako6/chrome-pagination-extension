@@ -36,7 +36,7 @@ function connect(items) {
   });
 }
 
-function loadContentScript(activeItem) {
+function loadContentScript(activeItem, activeItemSelector = ".pagination > li.active") {
   let keydownHandler;
   const document = {
     addEventListener(type, handler) {
@@ -44,8 +44,7 @@ function loadContentScript(activeItem) {
       keydownHandler = handler;
     },
     querySelector(selector) {
-      assert.equal(selector, ".pagination > li.active");
-      return activeItem;
+      return selector.includes(activeItemSelector) ? activeItem : null;
     },
   };
 
@@ -83,6 +82,42 @@ test("右矢印でactiveの直後のページリンクをクリックする", ()
 
   assert.equal(next.link.clicks, 1);
   assert.equal(previous.link.clicks, 0);
+  assert.equal(event.prevented, true);
+});
+
+test("Algolia InstantSearchのselected項目から右矢印で次ページへ移動する", () => {
+  const active = paginationItem({
+    href: "https://example.com/?categories=FURNITURE&page=8",
+  });
+  const next = paginationItem({
+    href: "https://example.com/?categories=FURNITURE&page=9",
+  });
+  connect([active, next]);
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript(active, ".ais-Pagination-item--selected")(event);
+
+  assert.equal(next.link.clicks, 1);
+  assert.equal(event.prevented, true);
+});
+
+test("pagelink内のcurrent項目から右矢印で次ページへ移動する", () => {
+  const active = paginationItem();
+  const next = paginationItem({
+    href: "https://example.com/?request=page&next_page=3",
+  });
+  connect([active, next]);
+  const currentMarker = {
+    closest(selector) {
+      assert.equal(selector, "li");
+      return active;
+    },
+  };
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript(currentMarker, ".pagelink .current")(event);
+
+  assert.equal(next.link.clicks, 1);
   assert.equal(event.prevented, true);
 });
 

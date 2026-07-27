@@ -26,6 +26,17 @@ function findAdjacentPageLink(activeItem, direction) {
   return null;
 }
 
+function findActivePageItem() {
+  const activeItem = document.querySelector(
+    ".pagination > li.active, .ais-Pagination-item--selected",
+  );
+  if (activeItem) {
+    return activeItem;
+  }
+
+  return document.querySelector(".pagelink .current")?.closest("li") ?? null;
+}
+
 document.addEventListener("keydown", (event) => {
   if (
     event.defaultPrevented ||
@@ -49,7 +60,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  const activeItem = document.querySelector(".pagination > li.active");
+  const activeItem = findActivePageItem();
   if (!activeItem) {
     return;
   }
