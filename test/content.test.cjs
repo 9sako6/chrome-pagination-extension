@@ -36,15 +36,16 @@ function connect(items) {
   });
 }
 
-function loadContentScript(activeItem, activeItemSelector = ".pagination > li.active") {
+function loadContentScript(selectorEntries) {
   let keydownHandler;
+  const elements = new Map(selectorEntries);
   const document = {
     addEventListener(type, handler) {
       assert.equal(type, "keydown");
       keydownHandler = handler;
     },
     querySelector(selector) {
-      return selector.includes(activeItemSelector) ? activeItem : null;
+      return elements.get(selector) ?? null;
     },
   };
 
@@ -78,7 +79,7 @@ test("右矢印でactiveの直後のページリンクをクリックする", ()
   connect([previous, active, next]);
 
   const event = keyboardEvent("ArrowRight");
-  loadContentScript(active)(event);
+  loadContentScript([[".pagination > li.active", active]])(event);
 
   assert.equal(next.link.clicks, 1);
   assert.equal(previous.link.clicks, 0);
@@ -95,7 +96,7 @@ test("Algolia InstantSearchのselected項目から右矢印で次ページへ移
   connect([active, next]);
 
   const event = keyboardEvent("ArrowRight");
-  loadContentScript(active, ".ais-Pagination-item--selected")(event);
+  loadContentScript([[".ais-Pagination-item--selected", active]])(event);
 
   assert.equal(next.link.clicks, 1);
   assert.equal(event.prevented, true);
@@ -115,7 +116,7 @@ test("pagelink内のcurrent項目から右矢印で次ページへ移動する",
   };
 
   const event = keyboardEvent("ArrowRight");
-  loadContentScript(currentMarker, ".pagelink .current")(event);
+  loadContentScript([[".pagelink .current", currentMarker]])(event);
 
   assert.equal(next.link.clicks, 1);
   assert.equal(event.prevented, true);
@@ -128,7 +129,9 @@ test("左矢印で空要素とdisabled要素を飛ばして前のリンクをク
   const active = paginationItem();
   connect([previous, disabled, empty, active]);
 
-  loadContentScript(active)(keyboardEvent("ArrowLeft"));
+  loadContentScript([[".pagination > li.active", active]])(
+    keyboardEvent("ArrowLeft"),
+  );
 
   assert.equal(previous.link.clicks, 1);
 });
@@ -141,7 +144,7 @@ test("入力可能な要素にフォーカス中は何もしない", () => {
   const event = keyboardEvent("ArrowRight", {
     target: { closest: () => ({ tagName: "INPUT" }) },
   });
-  loadContentScript(active)(event);
+  loadContentScript([[".pagination > li.active", active]])(event);
 
   assert.equal(next.link.clicks, 0);
   assert.equal(event.prevented, false);
@@ -161,14 +164,76 @@ test("修飾キー、IME変換、処理済みイベントは無視する", () =>
     const active = paginationItem();
     const next = paginationItem({ href: "https://example.com/?page=12" });
     connect([active, next]);
-    loadContentScript(active)(event);
+    loadContentScript([[".pagination > li.active", active]])(event);
     assert.equal(next.link.clicks, 0);
   }
 });
 
 test("移動先がない場合は既定動作を妨げない", () => {
   const event = keyboardEvent("ArrowLeft");
-  loadContentScript(paginationItem())(event);
+  loadContentScript([[".pagination > li.active", paginationItem()]])(event);
 
+  assert.equal(event.prevented, false);
+});
+
+test("aria-currentとrelを持つページネーションで前後へ移動する", () => {
+  const previous = paginationItem({ href: "https://example.com/?page=2" });
+  const next = paginationItem({ href: "https://example.com/?page=4" });
+  const pagination = {
+    querySelector(selector) {
+      if (selector === 'a[rel="prev"][href], a[rel="next"][href]') {
+        return previous.link;
+      }
+      if (selector === 'a[rel="prev"][href]') {
+        return previous.link;
+      }
+      if (selector === 'a[rel="next"][href]') {
+        return next.link;
+      }
+      return null;
+    },
+  };
+  const currentPage = {
+    closest(selector) {
+      assert.equal(selector, "nav.pagination");
+      return pagination;
+    },
+  };
+
+  const keydownHandler = loadContentScript([
+    ['nav.pagination [aria-current="page"]', currentPage],
+  ]);
+  const previousEvent = keyboardEvent("ArrowLeft");
+  const nextEvent = keyboardEvent("ArrowRight");
+  keydownHandler(previousEvent);
+  keydownHandler(nextEvent);
+
+  assert.equal(next.link.clicks, 1);
+  assert.equal(previous.link.clicks, 1);
+  assert.equal(previousEvent.prevented, true);
+  assert.equal(nextEvent.prevented, true);
+});
+
+test("判定済みの形式に移動先がなくても別形式へフォールバックしない", () => {
+  const listPrevious = paginationItem({
+    href: "https://example.com/list?page=1",
+  });
+  const listActive = paginationItem();
+  connect([listPrevious, listActive]);
+
+  const algoliaNext = paginationItem({
+    href: "https://example.com/algolia?page=3",
+  });
+  const algoliaActive = paginationItem();
+  connect([algoliaActive, algoliaNext]);
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript([
+    [".pagination > li.active", listActive],
+    [".ais-Pagination-item--selected", algoliaActive],
+  ])(event);
+
+  assert.equal(listPrevious.link.clicks, 0);
+  assert.equal(algoliaNext.link.clicks, 0);
   assert.equal(event.prevented, false);
 });

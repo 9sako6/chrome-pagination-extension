@@ -26,15 +26,67 @@ function findAdjacentPageLink(activeItem, direction) {
   return null;
 }
 
-function findActivePageItem() {
+function createSiblingPagination(activeItem) {
+  return {
+    findLink(direction) {
+      return findAdjacentPageLink(activeItem, direction);
+    },
+  };
+}
+
+function detectListPagination() {
+  const activeItem = document.querySelector(".pagination > li.active");
+  return activeItem ? createSiblingPagination(activeItem) : null;
+}
+
+function detectAlgoliaPagination() {
   const activeItem = document.querySelector(
-    ".pagination > li.active, .ais-Pagination-item--selected",
+    ".ais-Pagination-item--selected",
   );
-  if (activeItem) {
-    return activeItem;
+  return activeItem ? createSiblingPagination(activeItem) : null;
+}
+
+function detectPagelinkPagination() {
+  const activeItem = document.querySelector(".pagelink .current")?.closest("li");
+  return activeItem ? createSiblingPagination(activeItem) : null;
+}
+
+function detectRelPagination() {
+  const currentPage = document.querySelector(
+    'nav.pagination [aria-current="page"]',
+  );
+  const pagination = currentPage?.closest("nav.pagination");
+  if (
+    !pagination ||
+    !pagination.querySelector('a[rel="prev"][href], a[rel="next"][href]')
+  ) {
+    return null;
   }
 
-  return document.querySelector(".pagelink .current")?.closest("li") ?? null;
+  return {
+    findLink(direction) {
+      const relation = direction === "previous" ? "prev" : "next";
+      return pagination.querySelector(`a[rel="${relation}"][href]`);
+    },
+  };
+}
+
+const paginationDetectors = [
+  detectListPagination,
+  detectAlgoliaPagination,
+  detectPagelinkPagination,
+  detectRelPagination,
+];
+
+function detectPagination() {
+  for (const detect of paginationDetectors) {
+    const pagination = detect();
+    if (pagination) {
+      return pagination;
+    }
+  }
+
+  return null;
 }
 
 document.addEventListener("keydown", (event) => {
@@ -60,12 +112,12 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  const activeItem = findActivePageItem();
-  if (!activeItem) {
+  const pagination = detectPagination();
+  if (!pagination) {
     return;
   }
 
-  const link = findAdjacentPageLink(activeItem, direction);
+  const link = pagination.findLink(direction);
   if (!link) {
     return;
   }
