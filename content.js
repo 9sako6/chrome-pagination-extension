@@ -51,6 +51,35 @@ function detectPagelinkPagination() {
   return activeItem ? createSiblingPagination(activeItem) : null;
 }
 
+function findAdjacentPageControl(activeItem, direction) {
+  const siblingProperty =
+    direction === "previous" ? "previousElementSibling" : "nextElementSibling";
+
+  for (let item = activeItem[siblingProperty]; item; item = item[siblingProperty]) {
+    const control = item.querySelector(".MuiPaginationItem-previousNext");
+    if (control) {
+      return control.disabled ? null : control;
+    }
+  }
+
+  return null;
+}
+
+function detectMuiPagination() {
+  const activeItem = document
+    .querySelector(".MuiPagination-ul .Mui-selected")
+    ?.closest("li");
+  if (!activeItem) {
+    return null;
+  }
+
+  return {
+    findLink(direction) {
+      return findAdjacentPageControl(activeItem, direction);
+    },
+  };
+}
+
 function detectRelPagination() {
   const currentPage = document.querySelector(
     'nav.pagination [aria-current="page"]',
@@ -75,6 +104,7 @@ const paginationDetectors = [
   detectListPagination,
   detectAlgoliaPagination,
   detectPagelinkPagination,
+  detectMuiPagination,
   detectRelPagination,
 ];
 

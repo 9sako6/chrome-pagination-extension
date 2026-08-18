@@ -29,6 +29,24 @@ function paginationItem({ disabled = false, href = null } = {}) {
   };
 }
 
+function muiPaginationItem({ control = false, disabled = false } = {}) {
+  const button = {
+    disabled,
+    clicks: 0,
+    click() {
+      this.clicks += 1;
+    },
+  };
+
+  return {
+    button,
+    nextElementSibling: null,
+    previousElementSibling: null,
+    querySelector: (selector) =>
+      control && selector === ".MuiPaginationItem-previousNext" ? button : null,
+  };
+}
+
 function connect(items) {
   items.forEach((item, index) => {
     item.previousElementSibling = items[index - 1] ?? null;
@@ -120,6 +138,51 @@ test("pagelink内のcurrent項目から右矢印で次ページへ移動する",
 
   assert.equal(next.link.clicks, 1);
   assert.equal(event.prevented, true);
+});
+
+test("MUI PaginationのMui-selectedから前後のボタンをクリックする", () => {
+  const previousControl = muiPaginationItem({ control: true });
+  const firstPage = muiPaginationItem();
+  const ellipsis = muiPaginationItem();
+  const active = muiPaginationItem();
+  const nextPage = muiPaginationItem();
+  const nextControl = muiPaginationItem({ control: true });
+  connect([previousControl, firstPage, ellipsis, active, nextPage, nextControl]);
+  const selectedButton = {
+    closest(selector) {
+      assert.equal(selector, "li");
+      return active;
+    },
+  };
+
+  const keydownHandler = loadContentScript([
+    [".MuiPagination-ul .Mui-selected", selectedButton],
+  ]);
+  const nextEvent = keyboardEvent("ArrowRight");
+  const previousEvent = keyboardEvent("ArrowLeft");
+  keydownHandler(nextEvent);
+  keydownHandler(previousEvent);
+
+  assert.equal(nextControl.button.clicks, 1);
+  assert.equal(previousControl.button.clicks, 1);
+  assert.equal(nextPage.button.clicks, 0);
+  assert.equal(nextEvent.prevented, true);
+  assert.equal(previousEvent.prevented, true);
+});
+
+test("MUI Paginationの無効なボタンには移動しない", () => {
+  const previousControl = muiPaginationItem({ control: true, disabled: true });
+  const active = muiPaginationItem();
+  connect([previousControl, active]);
+  const selectedButton = {
+    closest: () => active,
+  };
+
+  const event = keyboardEvent("ArrowLeft");
+  loadContentScript([[".MuiPagination-ul .Mui-selected", selectedButton]])(event);
+
+  assert.equal(previousControl.button.clicks, 0);
+  assert.equal(event.prevented, false);
 });
 
 test("左矢印で空要素とdisabled要素を飛ばして前のリンクをクリックする", () => {
