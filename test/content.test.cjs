@@ -90,6 +90,19 @@ function keyboardEvent(key, overrides = {}) {
   };
 }
 
+function clickableControl({ ariaDisabled = null, disabled = false } = {}) {
+  return {
+    clicks: 0,
+    disabled,
+    getAttribute(name) {
+      return name === "aria-disabled" ? ariaDisabled : null;
+    },
+    click() {
+      this.clicks += 1;
+    },
+  };
+}
+
 test("右矢印でactiveの直後のページリンクをクリックする", () => {
   const previous = paginationItem({ href: "https://example.com/?page=10" });
   const active = paginationItem();
@@ -150,7 +163,7 @@ test("MUI PaginationのMui-selectedから前後のボタンをクリックする
   connect([previousControl, firstPage, ellipsis, active, nextPage, nextControl]);
   const selectedButton = {
     closest(selector) {
-      assert.equal(selector, "li");
+      assert.equal(selector, 'li, [role="listitem"]');
       return active;
     },
   };
@@ -244,10 +257,15 @@ test("aria-currentとrelを持つページネーションで前後へ移動す�
   const next = paginationItem({ href: "https://example.com/?page=4" });
   const pagination = {
     querySelector(selector) {
-      if (selector === 'a[rel="prev"][href], a[rel="next"][href]') {
+      if (
+        selector ===
+        'a[rel="prev"][href], a[rel="previous"][href], a[rel="next"][href]'
+      ) {
         return previous.link;
       }
-      if (selector === 'a[rel="prev"][href]') {
+      if (
+        selector === 'a[rel="prev"][href], a[rel="previous"][href]'
+      ) {
         return previous.link;
       }
       if (selector === 'a[rel="next"][href]') {
@@ -299,4 +317,124 @@ test("判定済みの形式に移動先がなくても別形式へフォール�
   assert.equal(listPrevious.link.clicks, 0);
   assert.equal(algoliaNext.link.clicks, 0);
   assert.equal(event.prevented, false);
+});
+
+test("上位サイト固有の前後コントロールを操作する", () => {
+  const selectorPairs = [
+    ["#pnprev", "#pnnext"],
+    ["#sb_pagP, .sb_pagP", "#sb_pagN, .sb_pagN"],
+    ["#pagination-list #prev-page button", "#pagination-list #next-page button"],
+    [".Pagenation__prev a", ".Pagenation__next a"],
+    [".compPagination .prev", ".compPagination .next"],
+    [
+      ".s-pagination-container .s-pagination-previous",
+      ".s-pagination-container .s-pagination-next",
+    ],
+  ];
+
+  for (const [previousSelector, nextSelector] of selectorPairs) {
+    const previous = clickableControl();
+    const next = clickableControl();
+    const keydownHandler = loadContentScript([
+      [previousSelector, previous],
+      [nextSelector, next],
+    ]);
+
+    keydownHandler(keyboardEvent("ArrowLeft"));
+    keydownHandler(keyboardEvent("ArrowRight"));
+
+    assert.equal(previous.clicks, 1, previousSelector);
+    assert.equal(next.clicks, 1, nextSelector);
+  }
+});
+
+test("aria-disabledのサイト固有コントロールは操作しない", () => {
+  const previous = clickableControl({ ariaDisabled: "true" });
+  const next = clickableControl();
+  const keydownHandler = loadContentScript([
+    ["#pagination-list #prev-page button", previous],
+    ["#pagination-list #next-page button", next],
+  ]);
+
+  const previousEvent = keyboardEvent("ArrowLeft");
+  const nextEvent = keyboardEvent("ArrowRight");
+  keydownHandler(previousEvent);
+  keydownHandler(nextEvent);
+
+  assert.equal(previous.clicks, 0);
+  assert.equal(next.clicks, 1);
+  assert.equal(previousEvent.prevented, false);
+  assert.equal(nextEvent.prevented, true);
+});
+
+test("MUIのaria-current項目からbutton型の次ページを操作する", () => {
+  const activeItem = paginationItem();
+  const nextItem = paginationItem();
+  nextItem.link = clickableControl();
+  nextItem.querySelector = () => nextItem.link;
+  connect([activeItem, nextItem]);
+  const activeControl = {
+    closest(selector) {
+      assert.equal(selector, 'li, [role="listitem"]');
+      return activeItem;
+    },
+  };
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript([
+    ['.MuiPagination-ul [aria-current="page"]', activeControl],
+  ])(event);
+
+  assert.equal(nextItem.link.clicks, 1);
+  assert.equal(event.prevented, true);
+});
+
+test("Ant Designのactive項目から次ページを操作する", () => {
+  const active = paginationItem();
+  const next = paginationItem({ href: "https://example.com/?page=2" });
+  connect([active, next]);
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript([[".ant-pagination-item-active", active]])(event);
+
+  assert.equal(next.link.clicks, 1);
+  assert.equal(event.prevented, true);
+});
+
+test("上位サイトの現在ページ項目から隣のページを操作する", () => {
+  const active = paginationItem();
+  const next = paginationItem({ href: "https://example.com/?page=2" });
+  connect([active, next]);
+  const selector = [
+    ".Pager .Pager-Item_current",
+    ".Pagenation__page strong",
+    '#page [aria-current="page"]',
+    "#page strong",
+    '.sc_page_inner [aria-current="page"]',
+  ].join(", ");
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript([[selector, active]])(event);
+
+  assert.equal(next.link.clicks, 1);
+  assert.equal(event.prevented, true);
+});
+
+test("rel=previousとrel=nextの前後リンクを操作する", () => {
+  const previous = clickableControl();
+  const next = clickableControl();
+  const keydownHandler = loadContentScript([
+    [
+      'a[rel="prev"][href], a[rel="previous"][href], a[rel="next"][href]',
+      previous,
+    ],
+    ['a[rel="prev"][href], a[rel="previous"][href]', previous],
+    ['a[rel="next"][href]', next],
+  ]);
+
+  keydownHandler(keyboardEvent("ArrowLeft"));
+  keydownHandler(keyboardEvent("ArrowRight"));
+
+  assert.equal(previous.clicks, 1);
+  assert.equal(next.clicks, 1);
 });
