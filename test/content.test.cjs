@@ -117,6 +117,40 @@ test("右矢印でactiveの直後のページリンクをクリックする", ()
   assert.equal(event.prevented, true);
 });
 
+test("pagination内のulにネストしたactiveから次ページへ移動する", () => {
+  const previous = paginationItem();
+  const active = paginationItem();
+  const next = paginationItem({
+    href: "https://example.com/category/items/page/2",
+  });
+  connect([previous, active, next]);
+
+  const event = keyboardEvent("ArrowRight");
+  loadContentScript([[".pagination > ul > li.active", active]])(event);
+
+  assert.equal(next.link.clicks, 1);
+  assert.equal(event.prevented, true);
+});
+
+test("paginationのprev-pageとnext-pageで前後へ移動する", () => {
+  const previous = clickableControl();
+  const next = clickableControl();
+  const keydownHandler = loadContentScript([
+    [".pagination .prev-page a", previous],
+    [".pagination .next-page a", next],
+  ]);
+
+  const previousEvent = keyboardEvent("ArrowLeft");
+  const nextEvent = keyboardEvent("ArrowRight");
+  keydownHandler(previousEvent);
+  keydownHandler(nextEvent);
+
+  assert.equal(previous.clicks, 1);
+  assert.equal(next.clicks, 1);
+  assert.equal(previousEvent.prevented, true);
+  assert.equal(nextEvent.prevented, true);
+});
+
 test("Algolia InstantSearchのselected項目から右矢印で次ページへ移動する", () => {
   const active = paginationItem({
     href: "https://example.com/?categories=FURNITURE&page=8",
@@ -324,6 +358,7 @@ test("上位サイト固有の前後コントロールを操作する", () => {
     ["#pnprev", "#pnnext"],
     ["#sb_pagP, .sb_pagP", "#sb_pagN, .sb_pagN"],
     ["#pagination-list #prev-page button", "#pagination-list #next-page button"],
+    [".pagination .prev-page a", ".pagination .next-page a"],
     [".Pagenation__prev a", ".Pagenation__next a"],
     [".compPagination .prev", ".compPagination .next"],
     [

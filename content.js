@@ -107,6 +107,7 @@ function detectDirectionalPagination() {
     ["#pnprev", "#pnnext"],
     ["#sb_pagP, .sb_pagP", "#sb_pagN, .sb_pagN"],
     ["#pagination-list #prev-page button", "#pagination-list #next-page button"],
+    [".pagination .prev-page a", ".pagination .next-page a"],
     [".Pagenation__prev a", ".Pagenation__next a"],
     [".compPagination .prev", ".compPagination .next"],
     [
@@ -127,6 +128,7 @@ function detectDirectionalPagination() {
 function detectBootstrapPagination() {
   const activeItem =
     document.querySelector(".pagination > li.active") ??
+    document.querySelector(".pagination > ul > li.active") ??
     document.querySelector(".pagination > .page-item.active") ??
     paginationItem(document.querySelector('.pagination [aria-current="page"]'));
 
