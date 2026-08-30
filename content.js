@@ -8,6 +8,25 @@ function isEditableTarget(target) {
   );
 }
 
+const controlSelector = 'a, button, [role="button"]';
+
+const navigationByKey = new Map([
+  [
+    "ArrowLeft",
+    {
+      controlIndex: 0,
+      siblingProperty: "previousElementSibling",
+    },
+  ],
+  [
+    "ArrowRight",
+    {
+      controlIndex: 1,
+      siblingProperty: "nextElementSibling",
+    },
+  ],
+]);
+
 function isDisabled(element) {
   if (!element) {
     return true;
@@ -15,6 +34,7 @@ function isDisabled(element) {
 
   return (
     element.disabled === true ||
+    element.matches?.(":disabled") ||
     element.getAttribute?.("aria-disabled") === "true" ||
     element.classList?.contains("disabled") ||
     element.classList?.contains("Mui-disabled") ||
@@ -27,21 +47,17 @@ function findControl(item) {
     return null;
   }
 
-  const control =
-    typeof item.click === "function" ||
-    item.matches?.('a, button, [role="button"]')
-      ? item
-      : item.querySelector?.('a, button, [role="button"]');
+  const control = item.matches?.(controlSelector)
+    ? item
+    : item.querySelector?.(controlSelector);
 
   return control && !isDisabled(control) && typeof control.click === "function"
     ? control
     : null;
 }
 
-function findAdjacentPageControl(activeItem, direction) {
-  const siblingProperty =
-    direction === "previous" ? "previousElementSibling" : "nextElementSibling";
-
+function findAdjacentPageControl(activeItem, navigation) {
+  const { siblingProperty } = navigation;
   for (let item = activeItem[siblingProperty]; item; item = item[siblingProperty]) {
     const control = findControl(item);
     if (control) {
@@ -52,10 +68,8 @@ function findAdjacentPageControl(activeItem, direction) {
   return null;
 }
 
-function findAdjacentMatchingControl(activeItem, direction, selector) {
-  const siblingProperty =
-    direction === "previous" ? "previousElementSibling" : "nextElementSibling";
-
+function findAdjacentMatchingControl(activeItem, navigation, selector) {
+  const { siblingProperty } = navigation;
   for (let item = activeItem[siblingProperty]; item; item = item[siblingProperty]) {
     const control = findControl(item.querySelector?.(selector));
     if (control) {
@@ -73,33 +87,18 @@ function paginationItem(control) {
 function createSiblingPagination(activeControl) {
   const activeItem = paginationItem(activeControl);
 
-  return {
-    findControl(direction) {
-      return findAdjacentPageControl(activeItem, direction);
-    },
-  };
+  return (navigation) => findAdjacentPageControl(activeItem, navigation);
 }
 
-function createDirectionalPagination(previousSelector, nextSelector) {
-  return {
-    findControl(direction) {
-      const selector = direction === "previous" ? previousSelector : nextSelector;
-      return findControl(document.querySelector(selector));
-    },
-  };
-}
+function detectDirectionalPaginationWithin(root, selectorPairs) {
+  for (const selectors of selectorPairs) {
+    const controls = selectors.map((selector) => root.querySelector(selector));
+    if (controls.some(Boolean)) {
+      return (navigation) => findControl(controls[navigation.controlIndex]);
+    }
+  }
 
-function createScopedDirectionalPagination(
-  root,
-  previousSelector,
-  nextSelector,
-) {
-  return {
-    findControl(direction) {
-      const selector = direction === "previous" ? previousSelector : nextSelector;
-      return findControl(root.querySelector(selector));
-    },
-  };
+  return null;
 }
 
 function detectDirectionalPagination() {
@@ -116,23 +115,17 @@ function detectDirectionalPagination() {
     ],
   ];
 
-  for (const [previousSelector, nextSelector] of selectorPairs) {
-    if (document.querySelector(previousSelector) || document.querySelector(nextSelector)) {
-      return createDirectionalPagination(previousSelector, nextSelector);
-    }
-  }
-
-  return null;
+  return detectDirectionalPaginationWithin(document, selectorPairs);
 }
 
 function detectBootstrapPagination() {
-  const activeItem =
+  const activeControl =
     document.querySelector(".pagination > li.active") ??
     document.querySelector(".pagination > ul > li.active") ??
     document.querySelector(".pagination > .page-item.active") ??
-    paginationItem(document.querySelector('.pagination [aria-current="page"]'));
+    document.querySelector('.pagination [aria-current="page"]');
 
-  return activeItem ? createSiblingPagination(activeItem) : null;
+  return activeControl ? createSiblingPagination(activeControl) : null;
 }
 
 function detectMuiPagination() {
@@ -144,15 +137,12 @@ function detectMuiPagination() {
     return null;
   }
 
-  return {
-    findControl(direction) {
-      return findAdjacentMatchingControl(
-        activeItem,
-        direction,
-        ".MuiPaginationItem-previousNext",
-      );
-    },
-  };
+  return (navigation) =>
+    findAdjacentMatchingControl(
+      activeItem,
+      navigation,
+      ".MuiPaginationItem-previousNext",
+    );
 }
 
 function detectAntDesignPagination() {
@@ -166,8 +156,8 @@ function detectAlgoliaPagination() {
 }
 
 function detectPagelinkPagination() {
-  const activeItem = document.querySelector(".pagelink .current")?.closest("li");
-  return activeItem ? createSiblingPagination(activeItem) : null;
+  const activeControl = document.querySelector(".pagelink .current");
+  return activeControl ? createSiblingPagination(activeControl) : null;
 }
 
 function detectKnownSitePagination() {
@@ -185,27 +175,27 @@ function detectKnownSitePagination() {
 }
 
 function detectRelPagination() {
-  const previousSelector =
-    'a[rel="prev"][href], a[rel="previous"][href]';
-  const nextSelector = 'a[rel="next"][href]';
-  const adjacentSelector = `${previousSelector}, ${nextSelector}`;
+  const selectorPairs = [
+    [
+      'a[rel="prev"][href], a[rel="previous"][href]',
+      'a[rel="next"][href]',
+    ],
+  ];
   const currentPage = document.querySelector(
     'nav.pagination [aria-current="page"]',
   );
   const pagination = currentPage?.closest("nav.pagination");
-  if (pagination?.querySelector(adjacentSelector)) {
-    return createScopedDirectionalPagination(
+  if (pagination) {
+    const scopedPagination = detectDirectionalPaginationWithin(
       pagination,
-      previousSelector,
-      nextSelector,
+      selectorPairs,
     );
+    if (scopedPagination) {
+      return scopedPagination;
+    }
   }
 
-  if (!document.querySelector(adjacentSelector)) {
-    return null;
-  }
-
-  return createDirectionalPagination(previousSelector, nextSelector);
+  return detectDirectionalPaginationWithin(document, selectorPairs);
 }
 
 const paginationDetectors = [
@@ -219,11 +209,11 @@ const paginationDetectors = [
   detectRelPagination,
 ];
 
-function detectPagination() {
+function findPaginationControl(navigation) {
   for (const detect of paginationDetectors) {
-    const pagination = detect();
-    if (pagination) {
-      return pagination;
+    const resolveControl = detect();
+    if (resolveControl) {
+      return resolveControl(navigation);
     }
   }
 
@@ -243,22 +233,12 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  const direction =
-    event.key === "ArrowLeft"
-      ? "previous"
-      : event.key === "ArrowRight"
-        ? "next"
-        : null;
-  if (!direction) {
+  const navigation = navigationByKey.get(event.key);
+  if (!navigation) {
     return;
   }
 
-  const pagination = detectPagination();
-  if (!pagination) {
-    return;
-  }
-
-  const control = pagination.findControl(direction);
+  const control = findPaginationControl(navigation);
   if (!control) {
     return;
   }

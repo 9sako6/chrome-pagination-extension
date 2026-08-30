@@ -5,15 +5,14 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const contentScriptPath = path.join(__dirname, "..", "content.js");
-const contentScript = fs.existsSync(contentScriptPath)
-  ? fs.readFileSync(contentScriptPath, "utf8")
-  : "";
+const contentScript = fs.readFileSync(contentScriptPath, "utf8");
 
 function paginationItem({ disabled = false, href = null } = {}) {
   const link = href
     ? {
         href,
         clicks: 0,
+        matches: (selector) => selector === 'a, button, [role="button"]',
         click() {
           this.clicks += 1;
         },
@@ -22,10 +21,15 @@ function paginationItem({ disabled = false, href = null } = {}) {
 
   return {
     classList: { contains: (className) => className === "disabled" && disabled },
+    clicks: 0,
     link,
+    matches: () => false,
     nextElementSibling: null,
     previousElementSibling: null,
     querySelector: () => link,
+    click() {
+      this.clicks += 1;
+    },
   };
 }
 
@@ -33,6 +37,7 @@ function muiPaginationItem({ control = false, disabled = false } = {}) {
   const button = {
     disabled,
     clicks: 0,
+    matches: (selector) => selector.includes("button"),
     click() {
       this.clicks += 1;
     },
@@ -90,13 +95,19 @@ function keyboardEvent(key, overrides = {}) {
   };
 }
 
-function clickableControl({ ariaDisabled = null, disabled = false } = {}) {
+function clickableControl({
+  ariaDisabled = null,
+  disabled = false,
+  effectivelyDisabled = false,
+} = {}) {
   return {
     clicks: 0,
     disabled,
     getAttribute(name) {
       return name === "aria-disabled" ? ariaDisabled : null;
     },
+    matches: (selector) =>
+      selector === ":disabled" ? effectivelyDisabled : selector.includes("button"),
     click() {
       this.clicks += 1;
     },
@@ -113,6 +124,7 @@ test("右矢印でactiveの直後のページリンクをクリックする", ()
   loadContentScript([[".pagination > li.active", active]])(event);
 
   assert.equal(next.link.clicks, 1);
+  assert.equal(next.clicks, 0);
   assert.equal(previous.link.clicks, 0);
   assert.equal(event.prevented, true);
 });
@@ -175,7 +187,7 @@ test("pagelink内のcurrent項目から右矢印で次ページへ移動する",
   connect([active, next]);
   const currentMarker = {
     closest(selector) {
-      assert.equal(selector, "li");
+      assert.equal(selector, 'li, [role="listitem"]');
       return active;
     },
   };
@@ -286,17 +298,23 @@ test("移動先がない場合は既定動作を妨げない", () => {
   assert.equal(event.prevented, false);
 });
 
+test("矢印以外のキーでは移動しない", () => {
+  const active = paginationItem();
+  const next = paginationItem({ href: "https://example.com/?page=2" });
+  connect([active, next]);
+
+  const event = keyboardEvent("Enter");
+  loadContentScript([[".pagination > li.active", active]])(event);
+
+  assert.equal(next.link.clicks, 0);
+  assert.equal(event.prevented, false);
+});
+
 test("aria-currentとrelを持つページネーションで前後へ移動する", () => {
   const previous = paginationItem({ href: "https://example.com/?page=2" });
   const next = paginationItem({ href: "https://example.com/?page=4" });
   const pagination = {
     querySelector(selector) {
-      if (
-        selector ===
-        'a[rel="prev"][href], a[rel="previous"][href], a[rel="next"][href]'
-      ) {
-        return previous.link;
-      }
       if (
         selector === 'a[rel="prev"][href], a[rel="previous"][href]'
       ) {
@@ -402,6 +420,22 @@ test("aria-disabledのサイト固有コントロールは操作しない", () =
   assert.equal(nextEvent.prevented, true);
 });
 
+test("祖先の状態によって無効なネイティブコントロールは操作しない", () => {
+  const previous = clickableControl({ effectivelyDisabled: true });
+  const next = clickableControl();
+  const keydownHandler = loadContentScript([
+    ["#pagination-list #prev-page button", previous],
+    ["#pagination-list #next-page button", next],
+  ]);
+
+  const event = keyboardEvent("ArrowLeft");
+  keydownHandler(event);
+
+  assert.equal(previous.clicks, 0);
+  assert.equal(next.clicks, 0);
+  assert.equal(event.prevented, false);
+});
+
 test("MUIのaria-current項目からbutton型の次ページを操作する", () => {
   const activeItem = paginationItem();
   const nextItem = paginationItem();
@@ -459,10 +493,6 @@ test("rel=previousとrel=nextの前後リンクを操作する", () => {
   const previous = clickableControl();
   const next = clickableControl();
   const keydownHandler = loadContentScript([
-    [
-      'a[rel="prev"][href], a[rel="previous"][href], a[rel="next"][href]',
-      previous,
-    ],
     ['a[rel="prev"][href], a[rel="previous"][href]', previous],
     ['a[rel="next"][href]', next],
   ]);
