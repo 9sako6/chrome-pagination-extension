@@ -114,6 +114,75 @@ function clickableControl({
   };
 }
 
+function benefitStationPagination({ previousDisabled = false, nextDisabled = false } = {}) {
+  const controls = [previousDisabled, nextDisabled].map((disabled) => ({
+    ...clickableControl(),
+    classList: {
+      contains: (className) => disabled && className === "cursor-not-allowed",
+    },
+    matches: () => false,
+    querySelector: () => null,
+  }));
+  const selectors = [".b-pagination__icon.--prev", ".b-pagination__icon.--next"];
+
+  return {
+    controls,
+    querySelector: (selector) => controls[selectors.indexOf(selector)] ?? null,
+  };
+}
+
+test("Benefit Station arrows click the previous and next div controls", () => {
+  const pagination = benefitStationPagination();
+  const keydownHandler = loadContentScript([[".menus-pagination", pagination]]);
+
+  for (const key of ["ArrowLeft", "ArrowRight"]) {
+    const event = keyboardEvent(key);
+    keydownHandler(event);
+    assert.equal(event.prevented, true);
+  }
+
+  assert.equal(pagination.controls[0].clicks, 1);
+  assert.equal(pagination.controls[1].clicks, 1);
+});
+
+test("Benefit Station stops at the first and last pages without following unrelated links", () => {
+  for (const [key, options, disabledIndex] of [
+    ["ArrowLeft", { previousDisabled: true }, 0],
+    ["ArrowRight", { nextDisabled: true }, 1],
+  ]) {
+    const pagination = benefitStationPagination(options);
+    const unrelatedLink = clickableControl();
+    const keydownHandler = loadContentScript([
+      [".menus-pagination", pagination],
+      ['a[rel="prev"][href], a[rel="previous"][href]', unrelatedLink],
+      ['a[rel="next"][href]', unrelatedLink],
+    ]);
+
+    const event = keyboardEvent(key);
+    keydownHandler(event);
+
+    assert.equal(pagination.controls[disabledIndex].clicks, 0);
+    assert.equal(unrelatedLink.clicks, 0);
+    assert.equal(event.prevented, false);
+
+    const enabledKey = key === "ArrowLeft" ? "ArrowRight" : "ArrowLeft";
+    keydownHandler(keyboardEvent(enabledKey));
+    assert.equal(pagination.controls[1 - disabledIndex].clicks, 1);
+  }
+});
+
+test("Benefit Station with no results leaves arrow keys alone", () => {
+  const keydownHandler = loadContentScript([
+    [".menus-pagination", { querySelector: () => null }],
+  ]);
+
+  for (const key of ["ArrowLeft", "ArrowRight"]) {
+    const event = keyboardEvent(key);
+    keydownHandler(event);
+    assert.equal(event.prevented, false);
+  }
+});
+
 test("右矢印でactiveの直後のページリンクをクリックする", () => {
   const previous = paginationItem({ href: "https://example.com/?page=10" });
   const active = paginationItem();

@@ -128,6 +128,24 @@ function detectBootstrapPagination() {
   return activeControl ? createSiblingPagination(activeControl) : null;
 }
 
+function detectBenefitStationPagination() {
+  const pagination = document.querySelector(".menus-pagination");
+  if (!pagination) {
+    return null;
+  }
+
+  const selectors = [".b-pagination__icon.--prev", ".b-pagination__icon.--next"];
+  return (navigation) => {
+    const control = pagination.querySelector(selectors[navigation.controlIndex]);
+    return control &&
+      !isDisabled(control) &&
+      !control.classList.contains("cursor-not-allowed") &&
+      typeof control.click === "function"
+      ? control
+      : null;
+  };
+}
+
 function detectMuiPagination() {
   const activeControl =
     document.querySelector('.MuiPagination-ul [aria-current="page"]') ??
@@ -200,6 +218,7 @@ function detectRelPagination() {
 
 const paginationDetectors = [
   detectDirectionalPagination,
+  detectBenefitStationPagination,
   detectBootstrapPagination,
   detectMuiPagination,
   detectAntDesignPagination,
