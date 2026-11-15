@@ -1,8 +1,9 @@
 # Keyboard Pagination
 
-Webサイトのページネーションを左右の矢印キーで操作する、自分用のChrome拡張です。
+> [!NOTE]
+> Chromeで左右の矢印キーを使ってページを送るには、[Just Pagination](https://github.com/elephant-evergreen/just-pagination)をご利用ください。
 
-サイトごとに異なるページネーション形式へ、必要に応じて対応していきます。
+このリポジトリは、Webサイトを左右の矢印キーでページ送りするChrome拡張の過去の実装を保存しています。
 
 ## 操作
 
